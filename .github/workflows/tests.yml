@@ -1,0 +1,27 @@
+name: IFC importer tests
+on: [push, pull_request, workflow_dispatch]
+permissions:
+  contents: read
+jobs:
+  tests:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python: ['3.12', '3.13']
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: ingelibre/ingetrazo
+          ref: 24e7ada6df9f0b4f5f761f287aaade9e40e6728c
+          path: .test-host
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - run: python -m pip install -r requirements-dev.txt
+      - run: python -m pytest tests -q
+        env:
+          INGETRAZO_SOURCE: ${{ github.workspace }}/.test-host
+          QT_QPA_PLATFORM: offscreen

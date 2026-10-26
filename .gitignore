@@ -1,0 +1,8 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+.test-host/
+geometry.jsonl
+*.partial
+*.ifc-import-report.json
