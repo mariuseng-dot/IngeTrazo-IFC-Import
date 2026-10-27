@@ -438,3 +438,62 @@ def test_startup_geometry_does_not_block_origin(gui_app, sample, monkeypatch):
     assert figure in host.scene.groups
     assert dialog.summary['offset_subtracted_m'] == pytest.approx((9.7,20.,3.))
     dialog.close()
+
+
+def test_rectangular_column_has_six_faces(sample, tmp_path):
+    output = tmp_path / 'box.jsonl'
+    convert(sample[0], output, progress=lambda _: None)
+    item = next(r for r in records(output) if r.get('class') == 'IfcColumn')
+    group, skipped = drain(adapter_module().build_element(item, source=sample[0], offset=(0,0,0)))
+    assert skipped == 0
+    assert len(group.mesh.faces) == 6
+    assert all(len(f.loop) == 4 for f in group.mesh.faces)
+    assert len(group.mesh.edges) == 12
+    assert all(len(e.faces) == 2 for e in group.mesh.edges)
+    # A material boundary across a planar diagonal must survive.
+    item['materials'] = [{'color': [1,0,0]}, {'color': [0,0,1]}]
+    item['material_ids'] = list(range(2)) * 6
+    coloured, _ = drain(adapter_module().build_element(item, source=sample[0], offset=(0,0,0)))
+    assert len(coloured.mesh.faces) > 6
+
+
+def test_round_column_detail_and_polygon_caps(sample, tmp_path):
+    model = ifcopenshell.open(str(sample[0]))
+    column = model.by_guid(sample[2])
+    solid = column.Representation.Representations[0].Items[0]
+    solid.SweptArea = model.create_entity('IfcCircleProfileDef', ProfileType='AREA', Radius=200.)
+    model.write(str(sample[0]))
+    results = {}
+    for detail in ('fine', 'standard', 'coarse'):
+        output = tmp_path / (detail + '.jsonl')
+        convert(sample[0], output, curve_detail=detail, progress=lambda _: None)
+        item = next(r for r in records(output) if r.get('class') == 'IfcColumn')
+        group, skipped = drain(adapter_module().build_element(item, source=sample[0], offset=(0,0,0)))
+        assert skipped == 0
+        caps = [f for f in group.mesh.faces if len(f.loop) > 4]
+        assert len(caps) == 2
+        assert all(len(e.faces) == 2 for e in group.mesh.edges)
+        assert len(group.mesh.faces) == len(caps[0].loop) + 2
+        assert volume(item) == pytest.approx(np.pi * .2**2 * 3, rel=.05)
+        results[detail] = len(group.mesh.faces)
+    assert results['fine'] > results['standard'] >= results['coarse']
+
+
+def test_wall_window_hole_survives_polygon_union(sample, tmp_path):
+    model = ifcopenshell.open(str(sample[0]))
+    opening = model.by_type('IfcOpeningElement')[0]
+    # Lift the door opening to make an enclosed window, exercising hole loops.
+    from ifcopenshell.util import placement
+    matrix = placement.get_local_placement(opening.ObjectPlacement)
+    matrix[2,3] += 500
+    api('geometry.edit_object_placement', model, product=opening, matrix=matrix, is_si=False)
+    model.write(str(sample[0]))
+    output = tmp_path / 'window.jsonl'
+    convert(sample[0], output, auto_origin=True, progress=lambda _: None)
+    item = next(r for r in records(output) if r.get('class') == 'IfcWall')
+    group, _ = drain(adapter_module().build_element(item, source=sample[0], offset=(0,0,0)))
+    assert sum(bool(f.holes) for f in group.mesh.faces) == 2
+    assert all(len(e.faces) == 2 for e in group.mesh.edges)
+    triangles = np.array([[p.toTuple() for p in tri] for f in group.mesh.faces for tri in f.triangulate()])
+    result = abs(np.einsum('ij,ij->i', triangles[:,0], np.cross(triangles[:,1],triangles[:,2])).sum()/6)
+    assert result == pytest.approx(volume(item), abs=1e-5)

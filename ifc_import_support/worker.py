@@ -79,7 +79,7 @@ def storey_for(element):
 
 
 def convert(source, destination, *, structural=True, offset=(0., 0., 0.),
-            max_triangles=2000000, progress=emit, categories=None, auto_origin=False):
+            max_triangles=2000000, progress=emit, categories=None, auto_origin=False, curve_detail="standard"):
     import ifcopenshell
     import ifcopenshell.geom
     started = time.monotonic()
@@ -88,12 +88,18 @@ def convert(source, destination, *, structural=True, offset=(0., 0., 0.),
         raise ValueError('Offset must be three finite metre values.')
     if max_triangles < 1:
         raise ValueError('Triangle limit must be positive.')
+    detail = {'fine': (0.001, 0.5), 'standard': (0.005, 0.75), 'coarse': (0.01, 1.0)}
+    if curve_detail not in detail:
+        raise ValueError('Unknown curve detail.')
     model = ifcopenshell.open(str(source))
     settings = ifcopenshell.geom.settings()
     # World coordinates include nested placements. IfcOpenShell outputs SI metres.
     # Map conversion / projected CRS is deliberately not applied.
     settings.set('use-world-coords', True)
     settings.set('convert-back-units', False)
+    linear, angular = detail[curve_detail]
+    settings.set('mesher-linear-deflection', linear)
+    settings.set('mesher-angular-deflection', angular)
     selected = None
     if categories is not None:
         if not isinstance(categories, list) or not categories:
@@ -116,6 +122,7 @@ def convert(source, destination, *, structural=True, offset=(0., 0., 0.),
                                  'candidates': 0, 'imported': 0, 'failed': 0})['candidates'] += 1
     report = {'protocol': PROTOCOL, 'source': str(Path(source).resolve()),
               'schema': model.schema, 'ifcopenshell': ifcopenshell.version,
+              'curve_detail': curve_detail, 'curve_deflection_m': linear,
               'units': 'metres', 'offset_subtracted_m': offset,
               'mode': 'selected' if selected is not None else ('structural' if structural else 'physical'),
               'selected_categories': categories,
@@ -209,6 +216,7 @@ def main(argv=None):
     parser.add_argument('--selection', help='JSON file with selected class/predefined_type pairs.')
     parser.add_argument('--mode', choices=('structural', 'physical'), default='structural')
     parser.add_argument('--offset', nargs=3, type=float, default=(0., 0., 0.))
+    parser.add_argument('--curve-detail', choices=('fine', 'standard', 'coarse'), default='standard')
     parser.add_argument('--max-triangles', type=int, default=2000000)
     args = parser.parse_args(argv)
     try:
@@ -218,7 +226,7 @@ def main(argv=None):
             categories = (json.loads(Path(args.selection).read_text(encoding='utf-8'))
                           if args.selection else None)
             convert(args.input, args.output, structural=args.mode == 'structural',
-                    offset=args.offset, max_triangles=args.max_triangles, categories=categories, auto_origin=args.auto_origin)
+                    offset=args.offset, max_triangles=args.max_triangles, categories=categories, auto_origin=args.auto_origin, curve_detail=args.curve_detail)
     except Exception as exc:
         emit({'type': 'error', 'message': str(exc)})
         return 1

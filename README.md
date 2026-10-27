@@ -1,3 +1,13 @@
+# Lighter geometry in 0.4.0
+
+Flat triangles now merge into actual polygon faces: an ordinary rectangular column has six faces, and round columns have polygon caps and quadrilateral side facets. Material boundaries are preserved. Ambiguous topology is left unmerged rather than discarded.
+
+**Curve detail** offers Fine (1 mm), Standard (5 mm, default), and Coarse (10 mm) tessellation tolerances. Standard and Coarse reduce detail on analytic IFC curves; already triangulated IFC geometry cannot be retessellated by this setting. These are mesher settings, not a guaranteed total geometric error bound. Curved surfaces remain faceted. Fine uses the previous mesher settings.
+
+The completion message/report distinguishes source triangles from resulting polygon faces. The safety limit still counts source triangles. IngeTrazo internally triangulates polygon faces for display, but those display triangles are not separate editable faces.
+
+Update using `install_windows.bat` with IngeTrazo closed, then restart and reimport. Existing imports are not changed. Tested against generated rectangular/round columns and walls with openings, including save/reopen and undo; the full user model has not been tested.
+
 # Origin handling in 0.3.1
 
 Download the updated ZIP, close IngeTrazo, run `install_windows.bat`, and restart. Start a **new empty document** for the first recentered import.
@@ -10,7 +20,7 @@ Existing models already imported at distant coordinates are not moved retroactiv
 
 # Basic IFC Import for IngeTrazo
 
-**Version 0.3.1 — experimental. Targets IngeTrazo v0.5.9 (extension API 2).**
+**Version 0.4.0 — experimental. Targets IngeTrazo v0.5.9 (extension API 2).**
 
 Import an IFC as a reference for modelling and structural review: one selectable group per element, with visibility layers by building storey. Runs locally, using free software. This is an independent community extension, not an official IngeTrazo feature.
 
@@ -25,7 +35,7 @@ Import an IFC as a reference for modelling and structural review: one selectable
 - Storey visibility layers; stable IFC storey IDs distinguish storeys that have identical names. Elements without a storey use an Unassigned layer.
 - Element names, IFC classes and IFC GlobalIds preserved. Full source path, STEP ID, storey and offset are stored with the group in its extension metadata.
 - IFC geometry converted to metres, with object placements applied. Automatic origin shift or explicit shared XYZ offset in metres.
-- Surface colours and transparency. Coplanar triangulation seams are softened; sharp corners remain.
+- Surface colours and transparency. Connected coplanar triangles with matching materials are merged into polygon faces; sharp corners, concave outlines and openings remain.
 - Progress, cancellation, an adjustable triangle limit, and a JSON report of failures and counts.
 - A completed import is **one Undo step**. Cancelled or failed conversion adds no geometry. Saving as `.igz` retains the groups and metadata.
 

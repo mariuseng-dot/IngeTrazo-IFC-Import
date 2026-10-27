@@ -49,13 +49,46 @@ def build_element(item, *, source, offset):
                 face.attrs.update(materials[mid])
         if n // 3 % 400 == 399:
             yield
-    # Hide triangulation seams on flat faces; keep sharp corners and material
-    # boundaries. This changes edge display only, not the imported topology.
+    # Collect connected planar regions before mutating topology. Use the seed
+    # plane throughout: adjacent near-parallel facets must not flatten a curve.
+    adjacency = {f: [] for f in mesh.faces}
     for index, edge in enumerate(mesh.edges):
         if len(edge.faces) == 2:
             a, b = edge.faces
-            if a.attrs == b.attrs and QVector3D.dotProduct(a.normal(), b.normal()) > 0.999999:
-                edge.soft = True
+            if a.attrs == b.attrs:
+                adjacency[a].append(b)
+                adjacency[b].append(a)
+        if index % 400 == 399:
+            yield
+    remaining = set(mesh.faces)
+    for index, seed in enumerate(list(mesh.faces)):
+        if seed not in remaining:
+            continue
+        remaining.remove(seed)
+        normal = seed.normal()
+        origin = seed.loop[0].position
+        region, pending = [seed], [seed]
+        visited = 0
+        while pending:
+            current = pending.pop()
+            for other in adjacency[current]:
+                if other not in remaining:
+                    continue
+                if QVector3D.dotProduct(normal, other.normal()) < 0.99999:
+                    continue
+                if any(abs(QVector3D.dotProduct(normal, v.position-origin)) > 1e-5
+                       for v in other.loop):
+                    continue
+                remaining.remove(other)
+                region.append(other)
+                pending.append(other)
+            visited += 1
+            if visited % 400 == 0:
+                yield
+        if len(region) > 1:
+            # Host union preserves concave outlines and inner hole loops; on
+            # ambiguous/non-manifold regions it leaves the triangles intact.
+            mesh.dissolve_coplanar_region(region)
         if index % 400 == 399:
             yield
     return group, skipped

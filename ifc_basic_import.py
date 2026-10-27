@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""Basic IFC import 0.3.1 for IngeTrazo v0.5.9 (extension API 2)."""
+"""Basic IFC import 0.4.0 for IngeTrazo v0.5.9 (extension API 2)."""
 from __future__ import annotations
 import importlib.util
 import json
@@ -14,7 +14,7 @@ from PySide6.QtWidgets import (QComboBox, QDialog, QDialogButtonBox, QDoubleSpin
     QProgressBar, QPushButton, QSpinBox, QVBoxLayout, QWidget, QTreeWidget, QTreeWidgetItem)
 
 SUPPORT = Path(__file__).resolve().with_name('ifc_import_support')
-VERSION = '0.3.1'
+VERSION = '0.4.0'
 
 
 def _adapter():
@@ -85,6 +85,11 @@ class ImportDialog(QDialog):
         self.selection_label = QLabel('Choose an IFC and scan its categories first.')
         self.selection_label.setWordWrap(True)
         form.addRow(self.selection_label)
+        self.curve_detail = QComboBox()
+        self.curve_detail.addItems(['Fine (1 mm)', 'Standard (5 mm)', 'Coarse (10 mm)'])
+        self.curve_detail.setCurrentIndex(1)
+        self.curve_detail.setToolTip('Curve tessellation tolerance; applies to analytic IFC curves. Flat faces are merged in every mode.')
+        form.addRow('Curve detail', self.curve_detail)
         self.limit = QSpinBox()
         self.limit.setRange(1000, 5000000)
         self.limit.setSingleStep(50000)
@@ -289,6 +294,7 @@ class ImportDialog(QDialog):
         self.process.errorOccurred.connect(self._process_error)
         arguments = ['-u', str(SUPPORT / 'worker.py'),
             '--input', str(self.source.resolve()), '--output', str(self.output),
+            '--curve-detail', ('fine', 'standard', 'coarse')[self.curve_detail.currentIndex()],
             '--max-triangles', str(self.limit.value()), '--offset', *map(str, self.offset)]
         if action == 'scan':
             arguments.append('--scan')
@@ -401,10 +407,12 @@ class ImportDialog(QDialog):
                     raise ValueError('Document changed during import. Nothing imported.')
                 self.adapter.commit_groups(self.app.viewport, self.groups)
                 self.summary = {**item, 'extension_version': VERSION,
+                    'polygon_faces': sum(len(g.mesh.faces) for g in self.groups),
                     'groups_added': len(self.groups), 'empty_groups': self.empty_groups,
                     'degenerate_triangles_skipped': self.skipped_triangles,
                     'total_elapsed_seconds': round(time.monotonic()-self.started, 3)}
                 msg = (f"Imported {len(self.groups)} elements; {item['triangles']:,} source triangles. "
+                       f"{self.summary['polygon_faces']:,} resulting faces. "
                        f"{len(item['failed'])} failed; {self.skipped_triangles} tiny triangles skipped. "
                        f"{self.summary['total_elapsed_seconds']:.1f} seconds. "
                        'Save the report for details. Use Zoom Extents to find the model.')
