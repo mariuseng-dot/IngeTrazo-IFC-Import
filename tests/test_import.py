@@ -397,3 +397,28 @@ def test_changed_ifc_requires_rescan(gui_app, sample, monkeypatch):
     assert dialog.scan_stamp is None and not dialog.start.isEnabled()
     assert not host.scene.groups
     dialog.close()
+
+
+def test_automatic_origin_reused_for_second_model(sample, tmp_path):
+    first = tmp_path/'first.jsonl'
+    report = convert(sample[0], first, auto_origin=True, progress=lambda _: None)
+    offset = report['offset_subtracted_m']
+    assert offset == pytest.approx((9.7, 20., 3.))
+    second = tmp_path/'second.jsonl'
+    convert(sample[0], second, offset=offset, progress=lambda _: None)
+    a = [r for r in records(first) if r['type'] == 'element']
+    b = [r for r in records(second) if r['type'] == 'element']
+    assert [r['vertices'] for r in a] == [r['vertices'] for r in b]
+
+
+def test_dialog_restores_origin_from_saved_groups(gui_app, sample, monkeypatch):
+    import ifc_basic_import
+    dialog, host, errors = make_dialog(gui_app, sample, monkeypatch)
+    dialog._start()
+    run_until(gui_app, lambda: not dialog.busy)
+    assert not errors
+    reopened = ifc_basic_import.ImportDialog(host)
+    assert reopened.origin_mode.currentIndex() == 1
+    assert [s.value() for s in reopened.offsets] == pytest.approx(dialog.summary['offset_subtracted_m'])
+    reopened.close()
+    dialog.close()

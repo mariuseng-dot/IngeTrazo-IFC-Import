@@ -79,7 +79,7 @@ def storey_for(element):
 
 
 def convert(source, destination, *, structural=True, offset=(0., 0., 0.),
-            max_triangles=2000000, progress=emit, categories=None):
+            max_triangles=2000000, progress=emit, categories=None, auto_origin=False):
     import ifcopenshell
     import ifcopenshell.geom
     started = time.monotonic()
@@ -122,6 +122,7 @@ def convert(source, destination, *, structural=True, offset=(0., 0., 0.),
               'category_counts': [counts[k] for k in sorted(counts)],
               'candidates': len(products), 'imported': 0, 'triangles': 0,
               'failed': [], 'warnings': [], 'max_abs_coordinate_m': 0.0}
+    origin_chosen = not auto_origin
     destination = Path(destination)
     # A failed conversion must never leave an apparently complete stream.
     partial = destination.with_suffix(destination.suffix + '.partial')
@@ -143,6 +144,10 @@ def convert(source, destination, *, structural=True, offset=(0., 0., 0.),
                         raise ValueError('Non-finite geometry coordinates.')
                     if any(i < 0 or i >= len(verts) // 3 for i in faces):
                         raise ValueError('Triangle index out of range.')
+                    if not origin_chosen:
+                        offset = tuple(min(verts[axis::3]) for axis in range(3))
+                        report['offset_subtracted_m'] = offset
+                        origin_chosen = True
                     for i in range(len(verts)):
                         verts[i] -= offset[i % 3]
                     if not all(math.isfinite(v) for v in verts):
@@ -161,6 +166,7 @@ def convert(source, destination, *, structural=True, offset=(0., 0., 0.),
                             'guid': element.GlobalId, 'class': element.is_a(),
                             'name': element.Name or element.is_a(),
                             'predefined_type': category_for(element)[1],
+                            'offset_subtracted_m': offset,
                             'storey': storey_for(element), 'vertices': verts,
                             'triangles': faces, 'materials': materials,
                             'material_ids': list(shape.geometry.material_ids)}
@@ -198,6 +204,7 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--input', required=True)
     parser.add_argument('--output', required=True)
+    parser.add_argument('--auto-origin', action='store_true')
     parser.add_argument('--scan', action='store_true', help='List categories only; do not generate geometry.')
     parser.add_argument('--selection', help='JSON file with selected class/predefined_type pairs.')
     parser.add_argument('--mode', choices=('structural', 'physical'), default='structural')
@@ -211,7 +218,7 @@ def main(argv=None):
             categories = (json.loads(Path(args.selection).read_text(encoding='utf-8'))
                           if args.selection else None)
             convert(args.input, args.output, structural=args.mode == 'structural',
-                    offset=args.offset, max_triangles=args.max_triangles, categories=categories)
+                    offset=args.offset, max_triangles=args.max_triangles, categories=categories, auto_origin=args.auto_origin)
     except Exception as exc:
         emit({'type': 'error', 'message': str(exc)})
         return 1

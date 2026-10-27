@@ -1,6 +1,16 @@
+# Origin handling in 0.3.0
+
+Download the updated ZIP, close IngeTrazo, run `install_windows.bat`, and restart. Start a **new empty document** for the first recentered import.
+
+Choose **Move near origin automatically**. The minimum XYZ corner of the first successfully tessellated element becomes the shared origin (it is not the centre of the whole building). The same offset is subtracted from every imported element, before conversion to host float coordinates.
+
+The applied XYZ values appear after import, in the report, and in each imported group's saved metadata. Save the document as `.igz`. When importing another IFC into that document, **Use saved / entered XYZ offset** is selected automatically if existing imported groups agree on one offset. This preserves relative placement between models sharing the same source coordinate system. Do not independently recenter each discipline. For non-IFC imports, apply the displayed offset manually in the corresponding importer.
+
+Existing models already imported at distant coordinates are not moved retroactively. Use a new document and reimport. If multiple offsets exist in a document, choose the correct XYZ values explicitly; automatic recentering is blocked in a document with groups.
+
 # Basic IFC Import for IngeTrazo
 
-**Version 0.2.0 — experimental. Targets IngeTrazo v0.5.9 (extension API 2).**
+**Version 0.3.0 — experimental. Targets IngeTrazo v0.5.9 (extension API 2).**
 
 Import an IFC as a reference for modelling and structural review: one selectable group per element, with visibility layers by building storey. Runs locally, using free software. This is an independent community extension, not an official IngeTrazo feature.
 
@@ -14,7 +24,7 @@ Import an IFC as a reference for modelling and structural review: one selectable
 - Separate top-level group per element, so clicking a wall does not select the whole building.
 - Storey visibility layers; stable IFC storey IDs distinguish storeys that have identical names. Elements without a storey use an Unassigned layer.
 - Element names, IFC classes and IFC GlobalIds preserved. Full source path, STEP ID, storey and offset are stored with the group in its extension metadata.
-- IFC geometry converted to metres, with object placements applied. Optional explicit XYZ offset in metres; no automatic centring.
+- IFC geometry converted to metres, with object placements applied. Automatic origin shift or explicit shared XYZ offset in metres.
 - Surface colours and transparency. Coplanar triangulation seams are softened; sharp corners remain.
 - Progress, cancellation, an adjustable triangle limit, and a JSON report of failures and counts.
 - A completed import is **one Undo step**. Cancelled or failed conversion adds no geometry. Saving as `.igz` retains the groups and metadata.
@@ -23,7 +33,7 @@ This imports **triangulated reference geometry**. It does not reconstruct parame
 
 ## Updating from 0.1.x
 
-Download and extract the updated repository ZIP, close IngeTrazo, run **`install_windows.bat`**, and restart. You do **not** need to rerun the helper setup. The dialog title should say **0.2.0**.
+Download and extract the updated repository ZIP, close IngeTrazo, run **`install_windows.bat`**, and restart. You do **not** need to rerun the helper setup. The dialog title should say **0.3.0**.
 
 The previous **Structural only** checkbox is replaced by a category checklist. Browse to your IFC (or paste its path and click **Scan categories**), review the ticked rows, and click **Import**. Keep mullion/panel rows unchecked. Members and plates are off by default; explicitly check the relevant rows if you need structural bracing or steel plates.
 
@@ -74,7 +84,7 @@ Run these from the extracted repository folder, then run `install_windows.bat`.
 1. Start a new empty IngeTrazo document. Exit any open group before importing.
 2. Choose **Extensions → Import IFC (basic)…**.
 3. Browse to **`examples/structural-demo.ifc`** in the extracted folder.
-4. The category scan runs automatically after browsing. Keep **Structural review** selected (wall and column checked), offsets at **0**, and the triangle limit at **2,000,000**. You can also click **Scan categories** to refresh the list.
+4. The category scan runs automatically after browsing. Keep **Structural review** selected (wall and column checked), **Use saved / entered XYZ offset** with offsets at **0** for this coordinate-specific sample test, and the triangle limit at **2,000,000**. You can also click **Scan categories** to refresh the list.
 5. Click **Import**. Expect **2 groups**: a rotated wall with a door opening, and a column. The IFC uses millimetres; the imported wall is **4 m long, 0.30 m thick and 3 m high**. Its opening is **1 m wide and 2 m high**. The wall occupies X = 9.7–10 m, Y = 20–24 m and Z = 3–6 m; the column is near the origin.
 6. Close the dialog and use IngeTrazo's **Zoom Extents** command to find the model. Click each element separately.
 7. In the Layers panel, toggle the two IFC storey layers. They deliberately have the same Hebrew name but different IDs.
@@ -90,7 +100,7 @@ Start with a small structural IFC before trying a large architectural export. Th
 
 - **Structural review** is recommended for review of walls, columns and slabs. Adjust the checkboxes if you need fewer classes. Some exporters classify building parts as `IfcBuildingElementProxy`; check that row explicitly if needed. The importer preserves the exporter's classification. It cannot reliably distinguish glazing from structural parts if the exporter puts them in the same class and subtype; deselect the whole row or use a cleaner source export in that case.
 - **Maximum triangles** defaults to 2,000,000, an initial guard rather than a performance guarantee. Exceeding it stops conversion without adding a partial model. A single complex element can take time/memory to tessellate before its triangle count is known. Increase the limit cautiously, or export a smaller model/category set.
-- **Offsets:** keep all three at zero unless model coordinates are far from the origin. For survey coordinates, enter a chosen common XYZ origin in metres; the importer subtracts it. Use exactly the same offset for related architecture/structure IFCs. The report and group metadata record it. IFC projected-CRS/map-conversion transforms are not applied; this is not a georeferencing tool.
+- **Offsets:** use automatic origin for the first model in a new document, then reuse the saved offset for subsequent models. For survey coordinates, enter a chosen common XYZ origin in metres; the importer subtracts it. Use exactly the same offset for related architecture/structure IFCs. The report and group metadata record it. IFC projected-CRS/map-conversion transforms are not applied; this is not a georeferencing tool.
 - **Cancellation:** click Cancel import. The helper process stops, or staged groups are discarded. The document changes only once all staging is complete. The final commit/viewport refresh and host save operations can still briefly block the UI.
 - **Report:** before closing the import dialog, click **Save report…**. It includes schema, source file, helper version, offset, selected categories, per-category candidate/import/failure counts, imported groups, triangle counts, skipped triangles, per-element errors and elapsed time. It contains the local source path; review that before sharing the report publicly.
 - A successful import may still be **incomplete** if individual elements failed. Check the reported failures and compare the model against a trusted IFC viewer.

@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""Basic IFC import 0.2.0 for IngeTrazo v0.5.9 (extension API 2)."""
+"""Basic IFC import 0.3.0 for IngeTrazo v0.5.9 (extension API 2)."""
 from __future__ import annotations
 import importlib.util
 import json
@@ -9,12 +9,12 @@ import tempfile
 import time
 
 from PySide6.QtCore import QProcess, QSettings, QTimer, Qt
-from PySide6.QtWidgets import (QDialog, QDialogButtonBox, QDoubleSpinBox,
+from PySide6.QtWidgets import (QComboBox, QDialog, QDialogButtonBox, QDoubleSpinBox,
     QFileDialog, QFormLayout, QHBoxLayout, QLabel, QLineEdit, QMessageBox,
     QProgressBar, QPushButton, QSpinBox, QVBoxLayout, QWidget, QTreeWidget, QTreeWidgetItem)
 
 SUPPORT = Path(__file__).resolve().with_name('ifc_import_support')
-VERSION = '0.2.0'
+VERSION = '0.3.0'
 
 
 def _adapter():
@@ -90,6 +90,16 @@ class ImportDialog(QDialog):
         self.limit.setSingleStep(50000)
         self.limit.setValue(2000000)
         form.addRow('Maximum triangles', self.limit)
+        self.origin_mode = QComboBox()
+        self.origin_mode.addItems(['Move near origin automatically', 'Use saved / entered XYZ offset'])
+        form.addRow('Model origin', self.origin_mode)
+        saved = {tuple(g.ext['ifc_basic_import']['offset_subtracted_m'])
+                 for g in app.scene.groups if getattr(g, 'ext', None)
+                 and 'ifc_basic_import' in g.ext
+                 and 'offset_subtracted_m' in g.ext['ifc_basic_import']}
+        saved_offset = next(iter(saved)) if len(saved) == 1 else None
+        if saved_offset is not None:
+            self.origin_mode.setCurrentIndex(1)
         row = QWidget()
         offsets = QHBoxLayout(row)
         offsets.setContentsMargins(0, 0, 0, 0)
@@ -98,12 +108,15 @@ class ImportDialog(QDialog):
             offsets.addWidget(QLabel(axis))
             spin = QDoubleSpinBox()
             spin.setRange(-1e9, 1e9)
-            spin.setDecimals(4)
+            spin.setDecimals(8)
+            if saved_offset is not None:
+                spin.setValue(saved_offset[len(self.offsets)])
             offsets.addWidget(spin)
             self.offsets.append(spin)
         form.addRow('Subtract offset (metres)', row)
-        hint = QLabel('Leave offsets at 0 to preserve IFC placement. For survey coordinates,\n'
-                      'use the same XYZ offset for every related IFC. No automatic centring.')
+        hint = QLabel('Automatic: use the first imported element as the common origin.\n'
+                      'Saved offsets are restored from imported groups when this document is reopened.\n'
+                      'Use that same offset for later survey, architecture and MEP models.')
         hint.setWordWrap(True)
         form.addRow(hint)
         layout.addWidget(self.options)
@@ -283,6 +296,11 @@ class ImportDialog(QDialog):
             selection = Path(self.temp.name) / 'selection.json'
             selection.write_text(json.dumps(self._selected_categories()), encoding='utf-8')
             arguments += ['--selection', str(selection)]
+            if self.origin_mode.currentIndex() == 0:
+                if self.app.scene.groups or self.app.scene.mesh.faces or self.app.scene.mesh.edges:
+                    self._fail('This document already contains geometry. Use its saved/entered offset, or start an empty document.')
+                    return
+                arguments.append('--auto-origin')
         # PyInstaller uses a process-wide DLL directory on Windows. Children
         # inherit it; clear it only while spawning the unrelated Python.
         import sys
@@ -373,6 +391,7 @@ class ImportDialog(QDialog):
                 raise ValueError('Worker output ended before its summary.')
             item = json.loads(line)
             if item.get('type') == 'element':
+                self.offset = item.get('offset_subtracted_m', self.offset)
                 self.generator = self.adapter.build_element(item, source=self.source, offset=self.offset)
                 self.status.setText(f"Building element {len(self.groups)+1}: {item['name'][:160]}")
             elif item.get('type') == 'summary':
@@ -392,6 +411,11 @@ class ImportDialog(QDialog):
                     msg += '\n' + '\n'.join(item['warnings'])
                 if item['failed'] or self.empty_groups or self.skipped_triangles:
                     msg += '\nImport is incomplete: check the report before using it as a reference.'
+                for spin, value in zip(self.offsets, item['offset_subtracted_m']):
+                    spin.setValue(value)
+                if self.groups:
+                    self.origin_mode.setCurrentIndex(1)
+                msg += '\nSaved XYZ offset (metres): ' + ', '.join(map(str, item['offset_subtracted_m']))
                 self._finish(msg)
                 self.report_button.setEnabled(True)
             else:
