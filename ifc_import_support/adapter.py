@@ -21,6 +21,7 @@ def build_element(item, *, source, offset):
     group.ifc = {'class': item['class'], 'name': item['name']}
     group.ext = {'ifc_basic_import': {'guid': item['guid'], 'step_id': item['id'],
                  'source': str(Path(source).resolve()), 'storey': item['storey'],
+                 'predefined_type': item.get('predefined_type', 'NOTDEFINED'),
                  'offset_subtracted_m': list(offset)}}
     raw = item['vertices']
     if len(raw) % 3 or not all(math.isfinite(v) for v in raw):

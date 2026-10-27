@@ -10,7 +10,7 @@ import ifcopenshell.api
 import numpy as np
 import pytest
 
-from ifc_import_support.worker import convert
+from ifc_import_support.worker import convert, scan, category_for
 
 
 def api(operation, model=None, **kwargs):
@@ -243,6 +243,9 @@ def make_dialog(gui_app, sample, monkeypatch):
     dialog = ifc_basic_import.ImportDialog(host)
     dialog.file.setText(str(sample[0]))
     dialog.python.setText(sys.executable)
+    dialog._scan()
+    run_until(gui_app, lambda: not dialog.busy)
+    assert errors == []
     return dialog, host, errors
 
 
@@ -283,3 +286,114 @@ def test_plugin_discovery_and_menu_registration(gui_app):
     actions = []
     ifc_basic_import.setup(SimpleNamespace(add_menu_action=lambda *a, **k: actions.append(a)))
     assert actions[0][0] == 'Import IFC (basic)…'
+
+
+@pytest.fixture
+def facade_sample(sample):
+    path = sample[0]
+    model = ifcopenshell.open(str(path))
+    column = model.by_type('IfcColumn')[0]
+    floor = ifcopenshell.util.element.get_container(column)
+    for cls, subtype in [('IfcMember', 'MULLION'), ('IfcPlate', 'CURTAIN_PANEL')]:
+        element = api('root.create_entity', model, ifc_class=cls, name=subtype, predefined_type=subtype)
+        api('geometry.assign_representation', model, product=element,
+            representation=column.Representation.Representations[0])
+        api('spatial.assign_container', model, products=[element], relating_structure=floor)
+        api('geometry.edit_object_placement', model, product=element, matrix=np.eye(4))
+    model.write(str(path))
+    return sample
+
+
+def test_scan_counts_subtypes_without_tessellation(facade_sample, tmp_path, monkeypatch):
+    import ifcopenshell.geom
+    def forbidden(*args, **kwargs):
+        raise AssertionError('Scan must not tessellate geometry')
+    monkeypatch.setattr(ifcopenshell.geom, 'create_shape', forbidden)
+    result = scan(facade_sample[0], tmp_path/'scan.json', progress=lambda _: None)
+    rows = {(r['class'], r['predefined_type']): r for r in result['categories']}
+    assert sum(r['count'] for r in rows.values()) == 7
+    assert rows['IfcMember', 'MULLION']['count'] == 1
+    assert rows['IfcPlate', 'CURTAIN_PANEL']['count'] == 1
+    assert not rows['IfcMember', 'MULLION']['default_selected']
+    assert not rows['IfcPlate', 'CURTAIN_PANEL']['default_selected']
+    assert any(r['excluded'] for r in rows.values() if r['class'] == 'IfcSpace')
+    assert any(r['default_selected'] for r in rows.values() if r['class'] == 'IfcWall')
+
+
+def test_selected_categories_skip_facade_and_report_breakdown(facade_sample, tmp_path):
+    result = scan(facade_sample[0], tmp_path/'scan.json', progress=lambda _: None)
+    selection = [{'class': r['class'], 'predefined_type': r['predefined_type']}
+                 for r in result['categories'] if r['default_selected']]
+    output = tmp_path/'selected.jsonl'
+    report = convert(facade_sample[0], output, categories=selection, progress=lambda _: None)
+    assert report['mode'] == 'selected'
+    assert report['imported'] == 2
+    assert {r['class'] for r in records(output) if r['type'] == 'element'} == {'IfcWall', 'IfcColumn'}
+    assert sum(r['imported'] for r in report['category_counts']) == 2
+    # Users may explicitly opt into only the mullions.
+    report = convert(facade_sample[0], output,
+                     categories=[{'class': 'IfcMember', 'predefined_type': 'MULLION'}],
+                     progress=lambda _: None)
+    assert report['imported'] == 1
+    assert next(r for r in records(output) if r['type'] == 'element')['predefined_type'] == 'MULLION'
+    with pytest.raises(ValueError, match='Select at least one'):
+        convert(facade_sample[0], output, categories=[], progress=lambda _: None)
+
+
+def test_subtype_can_come_from_assigned_type(sample):
+    model = ifcopenshell.open(str(sample[0]))
+    element = api('root.create_entity', model, ifc_class='IfcMember')
+    kind = api('root.create_entity', model, ifc_class='IfcMemberType', predefined_type='MULLION')
+    api('type.assign_type', model, related_objects=[element], relating_type=kind)
+    assert category_for(element) == ('IfcMember', 'MULLION')
+
+
+def test_category_checkboxes_and_source_invalidation(gui_app, facade_sample, monkeypatch):
+    from PySide6.QtCore import Qt
+    dialog, host, errors = make_dialog(gui_app, facade_sample, monkeypatch)
+    assert len(dialog._selected_categories()) == 2
+    dialog._preset('none')
+    assert not dialog.start.isEnabled()
+    dialog._preset('all')
+    assert len(dialog._selected_categories()) == 5  # physical only; spaces/openings disabled
+    # Only the curtain panels: exact class+subtype selection, not whole IfcPlate hierarchy.
+    dialog._preset('none')
+    for index, row in enumerate(dialog.category_rows):
+        if row['class'] == 'IfcPlate':
+            dialog.categories.topLevelItem(index).setCheckState(0, Qt.Checked)
+    dialog._start()
+    run_until(gui_app, lambda: not dialog.busy)
+    assert errors == []
+    assert len(host.scene.groups) == 1
+    assert host.scene.groups[0].ifc['class'] == 'IfcPlate'
+    dialog.file.setText(str(facade_sample[0]) + '.different')
+    assert dialog.scan_stamp is None and not dialog.start.isEnabled()
+    assert dialog.categories.topLevelItemCount() == 0
+    dialog.close()
+
+
+def test_scan_cancel_does_not_enable_import(gui_app, sample, monkeypatch):
+    from PySide6.QtCore import QProcess
+    dialog, host, errors = make_dialog(gui_app, sample, monkeypatch)
+    dialog._scan()
+    dialog.reject()
+    run_until(gui_app, lambda: dialog.process.state() == QProcess.NotRunning and dialog.temp is None)
+    assert not dialog.start.isEnabled()
+    assert dialog.scan_stamp is None
+    assert not host.scene.groups
+    assert errors == []
+    dialog.close()
+
+
+def test_changed_ifc_requires_rescan(gui_app, sample, monkeypatch):
+    from PySide6.QtWidgets import QMessageBox
+    dialog, host, errors = make_dialog(gui_app, sample, monkeypatch)
+    notices = []
+    monkeypatch.setattr(QMessageBox, 'information', lambda *args: notices.append(args[2]))
+    path = sample[0]
+    path.write_text(path.read_text(encoding='utf-8') + '\n', encoding='utf-8')
+    dialog._start()
+    assert notices and not dialog.busy
+    assert dialog.scan_stamp is None and not dialog.start.isEnabled()
+    assert not host.scene.groups
+    dialog.close()
