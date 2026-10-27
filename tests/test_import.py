@@ -422,3 +422,19 @@ def test_dialog_restores_origin_from_saved_groups(gui_app, sample, monkeypatch):
     assert [s.value() for s in reopened.offsets] == pytest.approx(dialog.summary['offset_subtracted_m'])
     reopened.close()
     dialog.close()
+
+
+def test_startup_geometry_does_not_block_origin(gui_app, sample, monkeypatch):
+    from core.group import Group
+    from PySide6.QtGui import QVector3D
+    dialog, host, errors = make_dialog(gui_app, sample, monkeypatch)
+    figure = Group(name='Startup figure')
+    figure.mesh.add_face([QVector3D(0,0,0), QVector3D(1,0,0), QVector3D(0,0,2)])
+    host.scene.groups.append(figure)
+    dialog._start()
+    run_until(gui_app, lambda: not dialog.busy)
+    assert errors == []
+    assert dialog.summary['groups_added'] == 2
+    assert figure in host.scene.groups
+    assert dialog.summary['offset_subtracted_m'] == pytest.approx((9.7,20.,3.))
+    dialog.close()

@@ -1,4 +1,4 @@
-# Origin handling in 0.3.0
+# Origin handling in 0.3.1
 
 Download the updated ZIP, close IngeTrazo, run `install_windows.bat`, and restart. Start a **new empty document** for the first recentered import.
 
@@ -6,11 +6,11 @@ Choose **Move near origin automatically**. The minimum XYZ corner of the first s
 
 The applied XYZ values appear after import, in the report, and in each imported group's saved metadata. Save the document as `.igz`. When importing another IFC into that document, **Use saved / entered XYZ offset** is selected automatically if existing imported groups agree on one offset. This preserves relative placement between models sharing the same source coordinate system. Do not independently recenter each discipline. For non-IFC imports, apply the displayed offset manually in the corresponding importer.
 
-Existing models already imported at distant coordinates are not moved retroactively. Use a new document and reimport. If multiple offsets exist in a document, choose the correct XYZ values explicitly; automatic recentering is blocked in a document with groups.
+Existing models already imported at distant coordinates are not moved retroactively. Use a new document and reimport. If multiple offsets exist in a document, choose the correct XYZ values explicitly; automatic recentering is blocked when earlier IFC imports are present. Startup figures and unrelated drawing geometry do not block the first IFC import; they remain in their existing positions.
 
 # Basic IFC Import for IngeTrazo
 
-**Version 0.3.0 — experimental. Targets IngeTrazo v0.5.9 (extension API 2).**
+**Version 0.3.1 — experimental. Targets IngeTrazo v0.5.9 (extension API 2).**
 
 Import an IFC as a reference for modelling and structural review: one selectable group per element, with visibility layers by building storey. Runs locally, using free software. This is an independent community extension, not an official IngeTrazo feature.
 
@@ -33,7 +33,7 @@ This imports **triangulated reference geometry**. It does not reconstruct parame
 
 ## Updating from 0.1.x
 
-Download and extract the updated repository ZIP, close IngeTrazo, run **`install_windows.bat`**, and restart. You do **not** need to rerun the helper setup. The dialog title should say **0.3.0**.
+Download and extract the updated repository ZIP, close IngeTrazo, run **`install_windows.bat`**, and restart. You do **not** need to rerun the helper setup. The dialog title should say **0.3.1**.
 
 The previous **Structural only** checkbox is replaced by a category checklist. Browse to your IFC (or paste its path and click **Scan categories**), review the ticked rows, and click **Import**. Keep mullion/panel rows unchecked. Members and plates are off by default; explicitly check the relevant rows if you need structural bracing or steel plates.
 

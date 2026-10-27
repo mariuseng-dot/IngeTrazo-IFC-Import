@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""Basic IFC import 0.3.0 for IngeTrazo v0.5.9 (extension API 2)."""
+"""Basic IFC import 0.3.1 for IngeTrazo v0.5.9 (extension API 2)."""
 from __future__ import annotations
 import importlib.util
 import json
@@ -14,7 +14,7 @@ from PySide6.QtWidgets import (QComboBox, QDialog, QDialogButtonBox, QDoubleSpin
     QProgressBar, QPushButton, QSpinBox, QVBoxLayout, QWidget, QTreeWidget, QTreeWidgetItem)
 
 SUPPORT = Path(__file__).resolve().with_name('ifc_import_support')
-VERSION = '0.3.0'
+VERSION = '0.3.1'
 
 
 def _adapter():
@@ -297,8 +297,9 @@ class ImportDialog(QDialog):
             selection.write_text(json.dumps(self._selected_categories()), encoding='utf-8')
             arguments += ['--selection', str(selection)]
             if self.origin_mode.currentIndex() == 0:
-                if self.app.scene.groups or self.app.scene.mesh.faces or self.app.scene.mesh.edges:
-                    self._fail('This document already contains geometry. Use its saved/entered offset, or start an empty document.')
+                if any('ifc_basic_import' in (getattr(group, 'ext', None) or {})
+                       for group in self.app.scene.groups):
+                    self._fail('This document already contains imported IFC elements. Use their saved/entered offset, or start a new document.')
                     return
                 arguments.append('--auto-origin')
         # PyInstaller uses a process-wide DLL directory on Windows. Children
