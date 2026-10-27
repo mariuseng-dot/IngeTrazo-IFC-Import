@@ -33,7 +33,7 @@ def storey_for(element):
 
 
 def convert(source, destination, *, structural=True, offset=(0., 0., 0.),
-            max_triangles=200000, progress=emit):
+            max_triangles=2000000, progress=emit):
     import ifcopenshell
     import ifcopenshell.geom
     started = time.monotonic()
@@ -134,7 +134,7 @@ def main(argv=None):
     parser.add_argument('--output', required=True)
     parser.add_argument('--mode', choices=('structural', 'physical'), default='structural')
     parser.add_argument('--offset', nargs=3, type=float, default=(0., 0., 0.))
-    parser.add_argument('--max-triangles', type=int, default=200000)
+    parser.add_argument('--max-triangles', type=int, default=2000000)
     args = parser.parse_args(argv)
     try:
         convert(args.input, args.output, structural=args.mode == 'structural',

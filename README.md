@@ -1,6 +1,6 @@
 # Basic IFC Import for IngeTrazo
 
-**Version 0.1.0 — experimental. Targets IngeTrazo v0.5.9 (extension API 2).**
+**Version 0.1.1 — experimental. Targets IngeTrazo v0.5.9 (extension API 2).**
 
 Import an IFC as a reference for modelling and structural review: one selectable group per element, with visibility layers by building storey. Runs locally, using free software. This is an independent community extension, not an official IngeTrazo feature.
 
@@ -18,6 +18,10 @@ Import an IFC as a reference for modelling and structural review: one selectable
 - A completed import is **one Undo step**. Cancelled or failed conversion adds no geometry. Saving as `.igz` retains the groups and metadata.
 
 This imports **triangulated reference geometry**. It does not reconstruct parametric BIM objects or convert walls into native push/pull solids. Tiny triangles below the host's weld resolution may be skipped and are counted in the report. Hiding planar triangle seams does not merge their faces.
+
+## Updating from 0.1.0
+
+The default triangle limit is now **2,000,000** (previously 200,000). To use this immediately in an already installed version, set **Maximum triangles** to **2,000,000** in the import dialog and retry; no reinstall is needed for that manual change. To install the new default, download and extract the updated ZIP, close IngeTrazo, run `install_windows.bat`, and restart. The helper environment does not need to be installed again. The dialog still allows limits up to 5,000,000. Larger imports use more memory and may take longer.
 
 ## Windows: first-time setup
 
@@ -64,7 +68,7 @@ Run these from the extracted repository folder, then run `install_windows.bat`.
 1. Start a new empty IngeTrazo document. Exit any open group before importing.
 2. Choose **Extensions → Import IFC (basic)…**.
 3. Browse to **`examples/structural-demo.ifc`** in the extracted folder.
-4. Keep **Structural only** checked, offsets at **0**, and the triangle limit at **200,000**.
+4. Keep **Structural only** checked, offsets at **0**, and the triangle limit at **2,000,000**.
 5. Click **Import**. Expect **2 groups**: a rotated wall with a door opening, and a column. The IFC uses millimetres; the imported wall is **4 m long, 0.30 m thick and 3 m high**. Its opening is **1 m wide and 2 m high**. The wall occupies X = 9.7–10 m, Y = 20–24 m and Z = 3–6 m; the column is near the origin.
 6. Close the dialog and use IngeTrazo's **Zoom Extents** command to find the model. Click each element separately.
 7. In the Layers panel, toggle the two IFC storey layers. They deliberately have the same Hebrew name but different IDs.
@@ -79,7 +83,7 @@ With **Structural only** unticked, the sample imports **3 groups**, adding a fur
 Start with a small structural IFC before trying a large architectural export. The importer appends to the current document; importing the same file again creates additional groups rather than updating the previous import.
 
 - **Structural only** is recommended for review of walls, columns and slabs. Some exporters classify these as `IfcBuildingElementProxy`; those require the broader mode and will retain their original class.
-- **Maximum triangles** defaults to 200,000, an initial guard rather than a performance guarantee. Exceeding it stops conversion without adding a partial model. A single complex element can take time/memory to tessellate before its triangle count is known. Increase the limit cautiously, or export a smaller model/category set.
+- **Maximum triangles** defaults to 2,000,000, an initial guard rather than a performance guarantee. Exceeding it stops conversion without adding a partial model. A single complex element can take time/memory to tessellate before its triangle count is known. Increase the limit cautiously, or export a smaller model/category set.
 - **Offsets:** keep all three at zero unless model coordinates are far from the origin. For survey coordinates, enter a chosen common XYZ origin in metres; the importer subtracts it. Use exactly the same offset for related architecture/structure IFCs. The report and group metadata record it. IFC projected-CRS/map-conversion transforms are not applied; this is not a georeferencing tool.
 - **Cancellation:** click Cancel import. The helper process stops, or staged groups are discarded. The document changes only once all staging is complete. The final commit/viewport refresh and host save operations can still briefly block the UI.
 - **Report:** before closing the import dialog, click **Save report…**. It includes schema, source file, helper version, offset, candidates, imported groups, triangle counts, skipped triangles, per-element errors and elapsed time. It contains the local source path; review that before sharing the report publicly.
@@ -138,7 +142,7 @@ Tests require the upstream source; it is not vendored into this repository. On P
 The helper can also be run from a terminal, independently of IngeTrazo:
 
 ```sh
-python ifc_import_support/worker.py --input examples/structural-demo.ifc --output geometry.jsonl --mode structural --max-triangles 200000
+python ifc_import_support/worker.py --input examples/structural-demo.ifc --output geometry.jsonl --mode structural --max-triangles 2000000
 ```
 
 It emits progress as JSON lines on stdout, writes completed geometry to the requested JSONL file, and exits nonzero on fatal errors. Element-level failures are in the final summary. Generated geometry/report files are not needed after import.

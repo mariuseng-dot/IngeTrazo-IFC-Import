@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""Basic IFC import 0.1.0 for IngeTrazo v0.5.9 (extension API 2)."""
+"""Basic IFC import 0.1.1 for IngeTrazo v0.5.9 (extension API 2)."""
 from __future__ import annotations
 import importlib.util
 import json
@@ -14,7 +14,7 @@ from PySide6.QtWidgets import (QCheckBox, QDialog, QDialogButtonBox, QDoubleSpin
     QProgressBar, QPushButton, QSpinBox, QVBoxLayout, QWidget)
 
 SUPPORT = Path(__file__).resolve().with_name('ifc_import_support')
-VERSION = '0.1.0'
+VERSION = '0.1.1'
 
 
 def _adapter():
@@ -67,7 +67,7 @@ class ImportDialog(QDialog):
         self.limit = QSpinBox()
         self.limit.setRange(1000, 5000000)
         self.limit.setSingleStep(50000)
-        self.limit.setValue(200000)
+        self.limit.setValue(2000000)
         form.addRow('Maximum triangles', self.limit)
         row = QWidget()
         offsets = QHBoxLayout(row)
