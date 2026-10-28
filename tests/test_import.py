@@ -497,3 +497,35 @@ def test_wall_window_hole_survives_polygon_union(sample, tmp_path):
     triangles = np.array([[p.toTuple() for p in tri] for f in group.mesh.faces for tri in f.triangulate()])
     result = abs(np.einsum('ij,ij->i', triangles[:,0], np.cross(triangles[:,1],triangles[:,2])).sum()/6)
     assert result == pytest.approx(volume(item), abs=1e-5)
+
+
+def test_third_import_accepts_legacy_rounded_origin(gui_app, sample, monkeypatch):
+    import ifc_basic_import
+    dialog, host, errors = make_dialog(gui_app, sample, monkeypatch)
+    dialog._start()
+    run_until(gui_app, lambda: not dialog.busy)
+    exact = (123456.123456789, 627924.386612345, 3.123456789)
+    # Reproduce a document with original MAIN offset and UI-rounded A offset.
+    host.scene.groups[0].ext['ifc_basic_import']['offset_subtracted_m'] = list(exact)
+    host.scene.groups[1].ext['ifc_basic_import']['offset_subtracted_m'] = [round(v,8) for v in exact]
+    reopened = ifc_basic_import.ImportDialog(host)
+    assert reopened.origin_mode.currentIndex() == 1
+    reopened.file.setText(str(sample[0]))
+    reopened.python.setText(sys.executable)
+    reopened._scan()
+    run_until(gui_app, lambda: not reopened.busy)
+    reopened._start()
+    run_until(gui_app, lambda: not reopened.busy)
+    assert errors == []
+    assert len(host.scene.groups) == 4
+    assert tuple(reopened.summary['offset_subtracted_m']) == exact
+    again = ifc_basic_import.ImportDialog(host)
+    assert again.origin_mode.currentIndex() == 1
+    again.close()
+    reopened.close()
+    # A real difference must still require an explicit choice.
+    host.scene.groups[1].ext['ifc_basic_import']['offset_subtracted_m'][0] += .01
+    conflict = ifc_basic_import.ImportDialog(host)
+    assert conflict.saved_offset is None
+    conflict.close()
+    dialog.close()

@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""Basic IFC import 0.4.0 for IngeTrazo v0.5.9 (extension API 2)."""
+"""Basic IFC import 0.4.1 for IngeTrazo v0.5.9 (extension API 2)."""
 from __future__ import annotations
 import importlib.util
 import json
@@ -14,7 +14,7 @@ from PySide6.QtWidgets import (QComboBox, QDialog, QDialogButtonBox, QDoubleSpin
     QProgressBar, QPushButton, QSpinBox, QVBoxLayout, QWidget, QTreeWidget, QTreeWidgetItem)
 
 SUPPORT = Path(__file__).resolve().with_name('ifc_import_support')
-VERSION = '0.4.0'
+VERSION = '0.4.1'
 
 
 def _adapter():
@@ -98,11 +98,16 @@ class ImportDialog(QDialog):
         self.origin_mode = QComboBox()
         self.origin_mode.addItems(['Move near origin automatically', 'Use saved / entered XYZ offset'])
         form.addRow('Model origin', self.origin_mode)
-        saved = {tuple(g.ext['ifc_basic_import']['offset_subtracted_m'])
+        saved = [tuple(g.ext['ifc_basic_import']['offset_subtracted_m'])
                  for g in app.scene.groups if getattr(g, 'ext', None)
                  and 'ifc_basic_import' in g.ext
-                 and 'offset_subtracted_m' in g.ext['ifc_basic_import']}
-        saved_offset = next(iter(saved)) if len(saved) == 1 else None
+                 and 'offset_subtracted_m' in g.ext['ifc_basic_import']]
+        # Older imports round through eight-decimal UI fields. Differences
+        # below 0.1 micrometre are not distinct coordination origins.
+        saved_offset = saved[0] if saved and all(
+            max(v[axis] for v in saved) - min(v[axis] for v in saved) <= 1e-7
+            for axis in range(3)) else None
+        self.saved_offset = saved_offset
         if saved_offset is not None:
             self.origin_mode.setCurrentIndex(1)
         row = QWidget()
@@ -118,6 +123,7 @@ class ImportDialog(QDialog):
                 spin.setValue(saved_offset[len(self.offsets)])
             offsets.addWidget(spin)
             self.offsets.append(spin)
+        self.saved_offset_display = [spin.value() for spin in self.offsets]
         form.addRow('Subtract offset (metres)', row)
         hint = QLabel('Automatic: use the first imported element as the common origin.\n'
                       'Saved offsets are restored from imported groups when this document is reopened.\n'
@@ -259,6 +265,8 @@ class ImportDialog(QDialog):
         self.report_button.setEnabled(False)
         self.settings.setValue('python', str(interpreter))
         self.offset = [spin.value() for spin in self.offsets]
+        if self.saved_offset is not None and self.offset == self.saved_offset_display:
+            self.offset = list(self.saved_offset)
         self.started = time.monotonic()
         self.scene_at_start = self.app.scene
         self.stamp_at_start = self._source_stamp()
@@ -422,6 +430,8 @@ class ImportDialog(QDialog):
                     msg += '\nImport is incomplete: check the report before using it as a reference.'
                 for spin, value in zip(self.offsets, item['offset_subtracted_m']):
                     spin.setValue(value)
+                self.saved_offset = tuple(item['offset_subtracted_m'])
+                self.saved_offset_display = [spin.value() for spin in self.offsets]
                 if self.groups:
                     self.origin_mode.setCurrentIndex(1)
                 msg += '\nSaved XYZ offset (metres): ' + ', '.join(map(str, item['offset_subtracted_m']))

@@ -1,3 +1,9 @@
+# Shared-origin fix in 0.4.1
+
+Fixed an offset-rounding bug that could block a third IFC after the first two aligned correctly. Offset differences up to 0.0000001 m are treated as equivalent; genuinely different origins still require an explicit choice. Reusing an unchanged saved offset now retains its full precision instead of rounding through the displayed XYZ fields.
+
+Save the current document as `.igz`, close IngeTrazo, install this update using `install_windows.bat`, and reopen the document. Import the next IFC with **Use saved / entered XYZ offset**, which is selected automatically for matching offsets. Existing imported models do not need reimporting for this fix.
+
 # Lighter geometry in 0.4.0
 
 Flat triangles now merge into actual polygon faces: an ordinary rectangular column has six faces, and round columns have polygon caps and quadrilateral side facets. Material boundaries are preserved. Ambiguous topology is left unmerged rather than discarded.
@@ -20,7 +26,7 @@ Existing models already imported at distant coordinates are not moved retroactiv
 
 # Basic IFC Import for IngeTrazo
 
-**Version 0.4.0 — experimental. Targets IngeTrazo v0.5.9 (extension API 2).**
+**Version 0.4.1 — experimental. Targets IngeTrazo v0.5.9 (extension API 2).**
 
 Import an IFC as a reference for modelling and structural review: one selectable group per element, with visibility layers by building storey. Runs locally, using free software. This is an independent community extension, not an official IngeTrazo feature.
 
